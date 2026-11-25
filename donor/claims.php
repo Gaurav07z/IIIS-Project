@@ -123,36 +123,24 @@ $claims = $stmt->fetchAll();
                         <div class="actions">
                             <?php if ($claim['status'] === 'pickup_scheduled'): ?>
                                 <form action="update-claim.php" method="POST">
-                                    <input type="hidden" name="claim_id" value="<?= (int) $claim['id'] ?>">
-                                    <input type="hidden" name="action" value="confirm">
-                                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
-                                    <button class="button" type="submit">Confirm Pickup</button>
-                                </form>
-
-                                <form action="update-claim.php" method="POST"
-                                    onsubmit="return confirm('Reject this pickup request?')">
-                                    <input type="hidden" name="claim_id" value="<?= (int) $claim['id'] ?>">
-                                    <input type="hidden" name="action" value="reject">
-                                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
-                                    <button class="button danger" type="submit">Reject</button>
-                                </form>
-
-                            <?php elseif ($claim['status'] === 'pickup_confirmed'): ?>
-                                <form action="update-claim.php" method="POST">
-                                    <input type="hidden" name="claim_id" value="<?= (int) $claim['id'] ?>">
+                                    <input type="hidden" name="claim_id" value="<?= (int)$claim['id'] ?>">
                                     <input type="hidden" name="action" value="collect">
                                     <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
                                     <button class="button" type="submit">Mark Collected</button>
                                 </form>
-
+                                <form action="update-claim.php" method="POST" onsubmit="return confirm('Reject this pickup request?')">
+                                    <input type="hidden" name="claim_id" value="<?= (int)$claim['id'] ?>">
+                                    <input type="hidden" name="action" value="reject">
+                                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+                                    <button class="button danger" type="submit">Reject</button>
+                                </form>
                             <?php elseif ($claim['status'] === 'collected'): ?>
                                 <form action="update-claim.php" method="POST">
-                                    <input type="hidden" name="claim_id" value="<?= (int) $claim['id'] ?>">
+                                    <input type="hidden" name="claim_id" value="<?= (int)$claim['id'] ?>">
                                     <input type="hidden" name="action" value="complete">
                                     <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
                                     <button class="button" type="submit">Complete Donation</button>
                                 </form>
-
                             <?php else: ?>
                                 <span class="status"><?= e(ucwords(str_replace('_', ' ', $claim['status']))) ?></span>
                             <?php endif; ?>
