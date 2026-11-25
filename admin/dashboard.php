@@ -46,7 +46,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:13px;bor
 </style>
 </head>
 <body>
-<header><div class="brand">🌱 FoodLoop Admin</div><div>Welcome, <?= e($_SESSION['name']) ?> &nbsp; <a href="../notifications.php">Notifications</a> <a href="../auth/logout.php">Logout</a></div></header>
+<header><div class="brand">🌱 FoodLoop Admin</div><div>Welcome, <?= e($_SESSION['name']) ?> &nbsp; <a href="users.php">Manage Users</a> <a href="../notifications.php">Notifications</a> <a href="../auth/logout.php">Logout</a></div></header>
 <main>
 <h1>Admin Dashboard</h1>
 <p>Overview of FoodLoop platform activity.</p>
