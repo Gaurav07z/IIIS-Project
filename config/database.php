@@ -1,34 +1,23 @@
 <?php
-
 $host = "localhost";
 $dbname = "foodloop";
 $username = "root";
 $password = "";
 
 try {
-
     $conn = new PDO(
         "mysql:host=$host;dbname=$dbname;charset=utf8mb4",
         $username,
-        $password
+        $password,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false
+        ]
     );
-
-    // Enable PDO error reporting
-    $conn->setAttribute(
-        PDO::ATTR_ERRMODE,
-        PDO::ERRMODE_EXCEPTION
-    );
-
-    // Fetch database results as associative arrays
-    $conn->setAttribute(
-        PDO::ATTR_DEFAULT_FETCH_MODE,
-        PDO::FETCH_ASSOC
-    );
-
 } catch (PDOException $e) {
-
-    die("Database Connection Failed: " . $e->getMessage());
-
+    error_log("FoodLoop database connection failed: " . $e->getMessage());
+    http_response_code(500);
+    exit("Database connection failed. Please check the server configuration.");
 }
-
 ?>
