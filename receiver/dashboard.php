@@ -85,19 +85,19 @@ $foods = $stmt->fetchAll();
                 <p class="empty">No food donations are available right now.</p>
             <?php endif; ?>
         </div>
+        <?php if (isset($_GET['claim'])): ?>
+            <div class="claim-message">
+                <?php
+                $messages = [
+                    'success' => 'Food claimed successfully!',
+                    'unavailable' => 'Sorry, this food is no longer available.',
+                    'duplicate' => 'You have already claimed this food.'
+                ];
+                echo e($messages[$_GET['claim']] ?? 'Please try again.');
+                ?>
+            </div>
+        <?php endif; ?>
     </main>
-    <?php if (isset($_GET['claim'])): ?>
-        <div class="claim-message">
-            <?php
-            $messages = [
-                'success' => 'Food claimed successfully!',
-                'unavailable' => 'Sorry, this food is no longer available.',
-                'duplicate' => 'You have already claimed this food.'
-            ];
-            echo e($messages[$_GET['claim']] ?? 'Please try again.');
-            ?>
-        </div>
-    <?php endif; ?>
 
 </body>
 
