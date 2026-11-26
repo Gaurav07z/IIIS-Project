@@ -3,35 +3,80 @@
 require_once "../config/database.php";
 require_once "../config/session.php";
 
-if (isset($_SESSION['user_id'])) {
-    header("Location: ../" . $_SESSION['role'] . "/dashboard.php");
-    exit;
-}
-
 $error = "";
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
+// Check existing login session and current verification status
+if (isset($_SESSION['user_id'])) {
+    $stmt = $conn->prepare(
+        "SELECT id, role, verification_status FROM users WHERE id = ? LIMIT 1"
+    );
+    $stmt->execute([$_SESSION['user_id']]);
+    $currentUser = $stmt->fetch();
 
+    if (
+        $currentUser &&
+        in_array($currentUser['role'], ['admin', 'donor', 'receiver'], true) &&
+        (
+            $currentUser['role'] === 'admin' ||
+            $currentUser['verification_status'] === 'verified'
+        )
+    ) {
+        header("Location: ../" . $currentUser['role'] . "/dashboard.php");
+        exit;
+    }
+
+    // Clear invalid or unverified session
+    $_SESSION = [];
+    session_regenerate_id(true);
+
+    if ($currentUser && $currentUser['role'] !== 'admin') {
+        $status = $currentUser['verification_status'] ?? 'pending';
+
+        if ($status === 'pending') {
+            $error = "Your account is waiting for admin verification.";
+        } elseif ($status === 'rejected') {
+            $error = "Your account verification was rejected. Please contact the administrator.";
+        } else {
+            $error = "Your account is not verified. Please contact the administrator.";
+        }
+    }
+}
+
+// Login process
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
     $stmt = $conn->prepare(
         "SELECT * FROM users WHERE email = ? LIMIT 1"
     );
-
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password'])) {
 
-        session_regenerate_id(true);
+        if ($user['role'] !== 'admin') {
+            $status = $user['verification_status'] ?? 'pending';
 
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['name'] = $user['name'];
-        $_SESSION['role'] = $user['role'];
+            if ($status === 'pending') {
+                $error = "Your account is waiting for admin verification.";
+            } elseif ($status === 'rejected') {
+                $error = "Your account verification was rejected. Please contact the administrator.";
+            } elseif ($status !== 'verified') {
+                $error = "Your account status is invalid. Please contact the administrator.";
+            }
+        }
 
-        header("Location: ../" . $user['role'] . "/dashboard.php");
-        exit;
+        if ($error === '') {
+            session_regenerate_id(true);
+
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['name'] = $user['name'];
+            $_SESSION['role'] = $user['role'];
+
+            header("Location: ../" . $user['role'] . "/dashboard.php");
+            exit;
+        }
 
     } else {
         $error = "Invalid email or password.";
@@ -61,12 +106,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     <?php if (isset($_GET['registered'])): ?>
         <div class="message success">
-            Registration successful! Please login.
+            Registration successful! Your account is waiting for admin verification.
         </div>
     <?php endif; ?>
 
     <?php if ($error): ?>
-        <div class="message"><?= htmlspecialchars($error) ?></div>
+        <div class="message">
+            <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
+        </div>
     <?php endif; ?>
 
     <form method="POST">

@@ -2,62 +2,137 @@
 require_once "../config/database.php";
 require_once "../config/session.php";
 
+// Check donor login
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'donor') {
+    header("Location: ../auth/login.php");
+    exit;
+}
+
+$donorId = $_SESSION['user_id'];
+
+// Check donor verification
+$stmt = $conn->prepare("
+    SELECT verification_status
+    FROM users
+    WHERE id = ? AND role = 'donor'
+    LIMIT 1
+");
+$stmt->execute([$donorId]);
+$user = $stmt->fetch();
+
+if (!$user || $user['verification_status'] !== 'verified') {
     header("Location: ../auth/login.php");
     exit;
 }
 
 $error = "";
 
+$categories = [
+    'Vegetarian',
+    'Non-Vegetarian',
+    'Bakery',
+    'Fruits',
+    'Dairy',
+    'Other'
+];
+
+$form = [
+    'food_name' => '',
+    'category' => '',
+    'quantity' => '',
+    'description' => '',
+    'prepared_at' => '',
+    'expiry_time' => '',
+    'location' => ''
+];
+
+// Generate CSRF token
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
-    $name = trim($_POST['food_name'] ?? '');
-    $category = trim($_POST['category'] ?? '');
-    $quantity = filter_var($_POST['quantity'] ?? '', FILTER_VALIDATE_INT);
-    $description = trim($_POST['description'] ?? '');
-    $prepared = $_POST['prepared_at'] ?? '';
-    $expiry = $_POST['expiry_time'] ?? '';
-    $location = trim($_POST['location'] ?? '');
+    foreach ($form as $key => $value) {
+        $form[$key] = trim($_POST[$key] ?? '');
+    }
+
+    $name = $form['food_name'];
+    $category = $form['category'];
+    $quantity = filter_var($form['quantity'], FILTER_VALIDATE_INT);
+    $description = $form['description'];
+    $prepared = $form['prepared_at'];
+    $expiry = $form['expiry_time'];
+    $location = $form['location'];
+
     $image = null;
+    $imagePath = "../uploads/";
 
     try {
-        if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
-            throw new Exception("Invalid form request.");
+        // CSRF validation
+        if (
+            !isset($_POST['csrf_token']) ||
+            !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
+        ) {
+            throw new Exception("Invalid form request. Please refresh the page.");
         }
 
+        // Required field validation
         if (
-            $name === '' || $category === '' ||
-            !$quantity || $quantity < 1 ||
-            $location === '' || !$expiry
+            $name === '' ||
+            strlen($name) > 150 ||
+            !in_array($category, $categories, true) ||
+            !$quantity ||
+            $quantity < 1 ||
+            $location === '' ||
+            strlen($location) > 255 ||
+            strlen($description) > 2000 ||
+            !$expiry
         ) {
             throw new Exception("Please fill all required fields correctly.");
         }
 
-        $expiryDate = strtotime($expiry);
-        $preparedDate = $prepared ? strtotime($prepared) : null;
+        // Date validation
+        $expiryDate = DateTime::createFromFormat('Y-m-d\TH:i', $expiry);
+        $preparedDate = $prepared
+            ? DateTime::createFromFormat('Y-m-d\TH:i', $prepared)
+            : null;
 
-        if (!$expiryDate || $expiryDate <= time()) {
+        if (!$expiryDate || $expiryDate->format('Y-m-d\TH:i') !== $expiry) {
+            throw new Exception("Invalid expiry date.");
+        }
+
+        if ($expiryDate->getTimestamp() <= time()) {
             throw new Exception("Expiry time must be in the future.");
         }
 
-        if ($prepared && (!$preparedDate || $preparedDate > time())) {
+        if (
+            $prepared && (
+                !$preparedDate ||
+                $preparedDate->format('Y-m-d\TH:i') !== $prepared ||
+                $preparedDate->getTimestamp() > time()
+            )
+        ) {
             throw new Exception("Invalid preparation time.");
         }
 
-        if (!is_dir("../uploads")) {
-            mkdir("../uploads", 0755, true);
+        // Create upload directory if required
+        if (!is_dir($imagePath)) {
+            if (!mkdir($imagePath, 0755, true) && !is_dir($imagePath)) {
+                throw new Exception("Upload directory could not be created.");
+            }
         }
 
-        if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
+        // Image upload validation
+        if (
+            isset($_FILES['image']) &&
+            $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE
+        ) {
+            if ($_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception("Image upload failed.");
+            }
 
-            if (
-                $_FILES['image']['error'] !== UPLOAD_ERR_OK ||
-                $_FILES['image']['size'] > 5 * 1024 * 1024
-            ) {
+            if ($_FILES['image']['size'] > 5 * 1024 * 1024) {
                 throw new Exception("Image must be under 5 MB.");
             }
 
@@ -74,18 +149,23 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 throw new Exception("Only JPG, PNG and WEBP images are allowed.");
             }
 
+            if (@getimagesize($_FILES['image']['tmp_name']) === false) {
+                throw new Exception("Invalid image file.");
+            }
+
             $image = bin2hex(random_bytes(16)) . "." . $types[$mime];
 
             if (
                 !move_uploaded_file(
                     $_FILES['image']['tmp_name'],
-                    "../uploads/" . $image
+                    $imagePath . $image
                 )
             ) {
                 throw new Exception("Image upload failed.");
             }
         }
 
+        // Save donation
         $stmt = $conn->prepare("
             INSERT INTO food_listings
             (donor_id, food_name, category, quantity, description,
@@ -94,13 +174,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         ");
 
         $stmt->execute([
-            $_SESSION['user_id'],
+            $donorId,
             $name,
             $category,
             $quantity,
             $description,
-            $prepared ? date('Y-m-d H:i:s', $preparedDate) : null,
-            date('Y-m-d H:i:s', $expiryDate),
+            $preparedDate ? $preparedDate->format('Y-m-d H:i:s') : null,
+            $expiryDate->format('Y-m-d H:i:s'),
             $location,
             $image
         ]);
@@ -111,13 +191,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         exit;
 
     } catch (Throwable $e) {
-        if ($image && is_file("../uploads/" . $image)) {
-            unlink("../uploads/" . $image);
+
+        if ($image && is_file($imagePath . $image)) {
+            unlink($imagePath . $image);
         }
+
+        error_log("FoodLoop donation error: " . $e->getMessage());
+
         $error = $e instanceof PDOException
             ? "Could not save donation. Please try again."
             : $e->getMessage();
     }
+}
+
+function e($value)
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 ?>
 
@@ -129,6 +218,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Food - FoodLoop</title>
     <link rel="stylesheet" href="donor.css">
+
     <style>
         .form-box {
             max-width: 750px;
@@ -184,7 +274,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </head>
 
 <body>
-
     <div class="layout">
 
         <aside class="sidebar">
@@ -192,6 +281,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             <a href="dashboard.php">Dashboard</a>
             <a href="add-food.php" class="active">Add Donation</a>
             <a href="my-donations.php">My Donations</a>
+            <a href="claims.php">Manage Claims</a>
             <a href="../auth/logout.php">Logout</a>
         </aside>
 
@@ -205,84 +295,70 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </div>
 
             <div class="form-box">
-
                 <?php if ($error): ?>
-                    <div class="error"><?= htmlspecialchars($error) ?></div>
+                    <div class="error"><?= e($error) ?></div>
                 <?php endif; ?>
-
                 <form method="POST" enctype="multipart/form-data">
-
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
 
                     <div class="field">
                         <label>Food Name *</label>
-                        <input type="text" name="food_name" maxlength="150" required>
+                        <input type="text" name="food_name" maxlength="150" value="<?= e($form['food_name']) ?>"
+                            required>
                     </div>
 
                     <div class="form-grid">
-
                         <div class="field">
                             <label>Category *</label>
                             <select name="category" required>
                                 <option value="">Select Category</option>
-                                <option>Vegetarian</option>
-                                <option>Non-Vegetarian</option>
-                                <option>Bakery</option>
-                                <option>Fruits</option>
-                                <option>Dairy</option>
-                                <option>Other</option>
+                                <?php foreach ($categories as $item): ?>
+                                    <option value="<?= e($item) ?>" <?= $form['category'] === $item ? 'selected' : '' ?>>
+                                        <?= e($item) ?>
+                                    </option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
-
                         <div class="field">
                             <label>Quantity (meals/items) *</label>
-                            <input type="number" name="quantity" min="1" required>
+                            <input type="number" name="quantity" min="1" value="<?= e($form['quantity']) ?>" required>
                         </div>
-
                         <div class="field">
                             <label>Preparation Time</label>
-                            <input type="datetime-local" name="prepared_at" max="<?= date('Y-m-d\TH:i') ?>">
+                            <input type="datetime-local" name="prepared_at" max="<?= date('Y-m-d\TH:i') ?>"
+                                value="<?= e($form['prepared_at']) ?>">
                         </div>
 
                         <div class="field">
                             <label>Pickup Deadline *</label>
                             <input type="datetime-local" name="expiry_time" min="<?= date('Y-m-d\TH:i', time() + 60) ?>"
-                                required>
+                                value="<?= e($form['expiry_time']) ?>" required>
                         </div>
-
                     </div>
 
                     <div class="field">
                         <label>Pickup Location *</label>
-                        <input type="text" name="location" maxlength="255" required>
+                        <input type="text" name="location" maxlength="255" value="<?= e($form['location']) ?>" required>
                     </div>
-
                     <div class="field">
                         <label>Food Description</label>
-                        <textarea name="description" rows="4" maxlength="2000"></textarea>
+                        <textarea name="description" rows="4" maxlength="2000"><?= e($form['description']) ?></textarea>
                     </div>
 
                     <div class="field">
                         <label>Food Image (Maximum 5 MB)</label>
                         <input type="file" name="image" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
                     </div>
-
                     <button class="button" type="submit">
                         Publish Donation
                     </button>
-
                     <a href="dashboard.php" style="margin-left:12px">
                         Cancel
                     </a>
-
                 </form>
-
             </div>
-
         </main>
-
     </div>
-
 </body>
 
 </html>

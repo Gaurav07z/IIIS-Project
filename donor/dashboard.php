@@ -1,8 +1,8 @@
-
 <?php
 require_once "../config/database.php";
 require_once "../config/session.php";
 
+// Check donor login
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'donor') {
     header("Location: ../auth/login.php");
     exit;
@@ -10,17 +10,35 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'donor') {
 
 $id = $_SESSION['user_id'];
 
+// Check current verification status from database
+$stmt = $conn->prepare("
+    SELECT verification_status
+    FROM users
+    WHERE id = ? AND role = 'donor'
+    LIMIT 1
+");
+$stmt->execute([$id]);
+$user = $stmt->fetch();
+
+// Block unverified or missing accounts
+if (!$user || $user['verification_status'] !== 'verified') {
+    header("Location: ../auth/login.php");
+    exit;
+}
+
+// Dashboard statistics
 $stmt = $conn->prepare("
     SELECT
-    COUNT(*) AS total,
-    SUM(status = 'available' AND expiry_time > NOW()) AS available,
-    SUM(status = 'completed') AS completed
+        COUNT(*) AS total,
+        SUM(status = 'available' AND expiry_time > NOW()) AS available,
+        SUM(status = 'completed') AS completed
     FROM food_listings
     WHERE donor_id = ?
 ");
 $stmt->execute([$id]);
 $stats = $stmt->fetch();
 
+// Recent donations
 $stmt = $conn->prepare("
     SELECT * FROM food_listings
     WHERE donor_id = ?
@@ -30,110 +48,110 @@ $stmt = $conn->prepare("
 $stmt->execute([$id]);
 $foods = $stmt->fetchAll();
 
-function e($value) {
-    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+function e($value)
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Donor Dashboard - FoodLoop</title>
     <link rel="stylesheet" href="donor.css">
 </head>
+
 <body>
 
-<div class="layout">
+    <div class="layout">
 
-    <aside class="sidebar">
-        <div class="brand">🌱 FoodLoop</div>
-        <a href="dashboard.php" class="active">Dashboard</a>
-        <a href="add-food.php">Add Donation</a>
-        <a href="my-donations.php">My Donations</a>
-        <a href="../index.php">Visit Website</a>
-        <a href="claims.php">Manage Claims</a>
-        <a href="../auth/logout.php">Logout</a>
-    </aside>
+        <aside class="sidebar">
+            <div class="brand">🌱 FoodLoop</div>
+            <a href="dashboard.php" class="active">Dashboard</a>
+            <a href="add-food.php">Add Donation</a>
+            <a href="my-donations.php">My Donations</a>
+            <a href="../index.php">Visit Website</a>
+            <a href="claims.php">Manage Claims</a>
+            <a href="../auth/logout.php">Logout</a>
+        </aside>
 
-    <main class="main">
+        <main class="main">
 
-        <div class="topbar">
-            <div>
-                <h1>Welcome, <?= e($_SESSION['name']) ?>!</h1>
-                <p>Manage your food donations.</p>
+            <div class="topbar">
+                <div>
+                    <h1>Welcome, <?= e($_SESSION['name']) ?>!</h1>
+                    <p>Manage your food donations.</p>
+                </div>
+
+                <a href="add-food.php" class="button">+ Add Food</a>
             </div>
 
-            <a href="add-food.php" class="button">+ Add Food</a>
-        </div>
+            <div class="stats">
 
-        <div class="stats">
+                <div class="stat-card">
+                    <p>Total Donations</p>
+                    <h2><?= (int) $stats['total'] ?></h2>
+                </div>
 
-            <div class="stat-card">
-                <p>Total Donations</p>
-                <h2><?= (int)$stats['total'] ?></h2>
+                <div class="stat-card">
+                    <p>Available Donations</p>
+                    <h2><?= (int) $stats['available'] ?></h2>
+                </div>
+
+                <div class="stat-card">
+                    <p>Completed Donations</p>
+                    <h2><?= (int) $stats['completed'] ?></h2>
+                </div>
+
             </div>
 
-            <div class="stat-card">
-                <p>Available Donations</p>
-                <h2><?= (int)$stats['available'] ?></h2>
+            <div class="panel">
+
+                <h3>Recent Donations</h3>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Food</th>
+                            <th>Quantity</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        <?php if ($foods): ?>
+
+                            <?php foreach ($foods as $food): ?>
+                                <tr>
+                                    <td><?= e($food['food_name']) ?></td>
+                                    <td><?= (int) $food['quantity'] ?></td>
+                                    <td><?= e($food['location']) ?></td>
+                                    <td>
+                                        <span class="status">
+                                            <?= e(ucfirst($food['status'])) ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+
+                        <?php else: ?>
+
+                            <tr>
+                                <td colspan="4">No donations added yet.</td>
+                            </tr>
+
+                        <?php endif; ?>
+
+                    </tbody>
+                </table>
             </div>
-
-            <div class="stat-card">
-                <p>Completed Donations</p>
-                <h2><?= (int)$stats['completed'] ?></h2>
-            </div>
-
-        </div>
-
-        <div class="panel">
-
-            <h3>Recent Donations</h3>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th>Food</th>
-                        <th>Quantity</th>
-                        <th>Location</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-
-                <?php if ($foods): ?>
-
-                    <?php foreach ($foods as $food): ?>
-                    <tr>
-                        <td><?= e($food['food_name']) ?></td>
-                        <td><?= (int)$food['quantity'] ?></td>
-                        <td><?= e($food['location']) ?></td>
-                        <td>
-                            <span class="status">
-                                <?= e(ucfirst($food['status'])) ?>
-                            </span>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-
-                <?php else: ?>
-
-                    <tr>
-                        <td colspan="4">No donations added yet.</td>
-                    </tr>
-
-                <?php endif; ?>
-
-                </tbody>
-            </table>
-
-        </div>
-
-    </main>
-
-</div>
-
+        </main>
+    </div>
 </body>
+
 </html>

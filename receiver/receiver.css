@@ -8,15 +8,19 @@ body {
   font-family: Arial, sans-serif;
   background: #f4f8f5;
   color: #24352b;
+  line-height: 1.6;
 }
 
+/* Header */
 .header {
   background: #123522;
   color: white;
-  padding: 20px 6%;
+  padding: 18px 6%;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
 }
 
 .logo {
@@ -26,23 +30,36 @@ body {
   text-decoration: none;
 }
 
-.logout {
-  color: white;
-  margin-left: 20px;
-  text-decoration: none;
-  background: #16834a;
-  padding: 10px 15px;
-  border-radius: 7px;
+.header div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
+.logout {
+  color: white;
+  text-decoration: none;
+  background: #16834a;
+  padding: 9px 15px;
+  border-radius: 7px;
+  transition: 0.3s;
+}
+
+.logout:hover {
+  background: #0c6637;
+}
+
+/* Container */
 .container {
   max-width: 1200px;
   margin: auto;
   padding: 40px 20px;
 }
 
+/* Welcome */
 .welcome {
-  background: #dff5e6;
+  background: linear-gradient(120deg, #dff5e6, #c7ecd4);
   padding: 45px;
   border-radius: 15px;
   margin-bottom: 40px;
@@ -52,28 +69,46 @@ body {
   color: #16834a;
   font-weight: bold;
   margin-bottom: 12px;
+  letter-spacing: 1px;
 }
 
 .welcome h1 {
   font-size: 36px;
   margin-bottom: 12px;
+  line-height: 1.2;
 }
 
+.welcome p {
+  color: #52665a;
+}
+
+/* Headings */
 .container h2 {
   margin-bottom: 25px;
+  font-size: 26px;
 }
 
+/* Food Grid */
 .food-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 25px;
 }
 
+/* Food Card */
 .food-card {
   background: white;
   border-radius: 13px;
   overflow: hidden;
   box-shadow: 0 5px 20px #0000000c;
+  transition:
+    transform 0.3s,
+    box-shadow 0.3s;
+}
+
+.food-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px #00000015;
 }
 
 .food-card img,
@@ -92,19 +127,25 @@ body {
   font-weight: bold;
 }
 
+/* Food Information */
 .food-info {
   padding: 20px;
 }
 
 .category {
+  display: inline-block;
   color: #16834a;
-  font-size: 13px;
+  background: #e7f7ec;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
   font-weight: bold;
 }
 
 .food-info h3 {
   margin: 12px 0;
   font-size: 21px;
+  color: #123522;
 }
 
 .food-info p {
@@ -114,48 +155,34 @@ body {
   overflow-wrap: anywhere;
 }
 
-.claim-btn {
+.food-info strong {
+  color: #24352b;
+}
+
+/* Forms */
+.food-info form {
+  margin-top: 15px;
+}
+
+.food-info label {
+  display: block;
+  margin: 12px 0 7px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.food-info input[type="datetime-local"] {
   width: 100%;
-  padding: 12px;
-  margin-top: 12px;
-  background: #16834a;
-  color: white;
-  border: none;
+  padding: 11px;
+  border: 1px solid #cbd8ce;
   border-radius: 7px;
-  cursor: not-allowed;
-  opacity: 0.7;
+  font-family: inherit;
+  color: #24352b;
 }
 
-.empty {
-  background: white;
-  padding: 25px;
-  border-radius: 10px;
-}
-
-@media (max-width: 600px) {
-  .header {
-    gap: 15px;
-    flex-direction: column;
-  }
-
-  .welcome {
-    padding: 25px;
-  }
-
-  .welcome h1 {
-    font-size: 27px;
-  }
-}
-
-.claim-message {
-  background: #dff5e6;
-  color: #16834a;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
+/* Schedule Pickup Button */
 .claim-btn {
+  display: block;
   width: 100%;
   padding: 12px;
   margin-top: 12px;
@@ -165,8 +192,173 @@ body {
   border-radius: 7px;
   cursor: pointer;
   font-weight: bold;
+  font-size: 15px;
+  transition: background 0.3s;
 }
 
 .claim-btn:hover {
   background: #0c6637;
+}
+
+/* Cancel Claim Button */
+.cancel-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  background: #dc3545 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: bold;
+  transition: background 0.3s ease;
+}
+
+.cancel-btn:hover {
+  background: #b02a37 !important;
+}
+
+/* Focus */
+.claim-btn:focus-visible,
+.cancel-btn:focus-visible,
+.logout:focus-visible {
+  outline: 3px solid #70d69a;
+  outline-offset: 3px;
+}
+
+/* Messages */
+.claim-message {
+  background: #dff5e6;
+  color: #16834a;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: bold;
+}
+
+.empty {
+  background: white;
+  padding: 25px;
+  border-radius: 10px;
+  color: #65736a;
+  text-align: center;
+  grid-column: 1 / -1;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .header {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .header div {
+    justify-content: center;
+  }
+
+  .container {
+    padding: 25px 15px;
+  }
+
+  .welcome {
+    padding: 25px;
+  }
+
+  .welcome h1 {
+    font-size: 27px;
+  }
+
+  .container h2 {
+    font-size: 22px;
+  }
+
+  .food-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Feedback Button */
+.feedback-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  background: #2563eb;
+  color: white;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 7px;
+  font-weight: bold;
+  transition: background 0.3s;
+}
+
+.feedback-btn:hover {
+  background: #1d4ed8;
+}
+
+.feedback-submitted {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  background: #dff5e6;
+  color: #16834a;
+  border: none;
+  border-radius: 7px;
+  font-weight: bold;
+  cursor: default;
+}
+
+/* Feedback Page */
+.feedback-container {
+  max-width: 650px;
+  margin: 30px auto;
+  padding: 30px;
+  background: white;
+  border-radius: 13px;
+  box-shadow: 0 5px 20px #0000000c;
+}
+
+.feedback-container h2 {
+  color: #123522;
+  margin-bottom: 15px;
+}
+
+.feedback-container p {
+  margin: 10px 0;
+  color: #65736a;
+}
+
+.feedback-container label {
+  display: block;
+  margin: 20px 0 8px;
+  font-weight: bold;
+}
+
+.feedback-container select,
+.feedback-container textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd8ce;
+  border-radius: 7px;
+  font-family: Arial, sans-serif;
+  font-size: 15px;
+}
+
+.feedback-container textarea {
+  resize: vertical;
+}
+
+.feedback-back {
+  display: block;
+  text-align: center;
+  margin-top: 15px;
+  color: #16834a;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.feedback-back:hover {
+  text-decoration: underline;
 }

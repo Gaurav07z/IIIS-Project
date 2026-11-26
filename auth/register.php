@@ -4,8 +4,16 @@ require_once "../config/database.php";
 require_once "../config/session.php";
 
 if (isset($_SESSION['user_id'])) {
-    header("Location: ../index.php");
-    exit;
+    $role = $_SESSION['role'] ?? '';
+
+    if (in_array($role, ['admin', 'donor', 'receiver'], true)) {
+        header("Location: ../" . $role . "/dashboard.php");
+        exit;
+    }
+}
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 $error = "";
@@ -17,23 +25,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $organization = trim($_POST['organization'] ?? '');
     $role = $_POST['role'] ?? '';
     $password = $_POST['password'] ?? '';
+    $token = $_POST['csrf_token'] ?? '';
 
-    if (
+    if (!hash_equals($_SESSION['csrf_token'], $token)) {
+        $error = "Invalid request. Please refresh the page.";
+    } elseif (
         $name === '' ||
+        strlen($name) > 100 ||
         !filter_var($email, FILTER_VALIDATE_EMAIL) ||
+        strlen($email) > 150 ||
+        strlen($phone) > 20 ||
+        strlen($organization) > 150 ||
         !in_array($role, ['donor', 'receiver'], true) ||
         strlen($password) < 8
     ) {
-        $error = "Enter valid details. Password must be at least 8 characters.";
+        $error = "Please enter valid details. Password must be at least 8 characters.";
     } else {
         try {
             $hash = password_hash($password, PASSWORD_DEFAULT);
 
-            $stmt = $conn->prepare(
-                "INSERT INTO users
-                (name, email, phone, organization, role, password)
-                VALUES (?, ?, ?, ?, ?, ?)"
-            );
+            $stmt = $conn->prepare("
+                INSERT INTO users
+                (name, email, phone, organization, role, password, verification_status)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending')
+            ");
 
             $stmt->execute([
                 $name,
@@ -43,6 +58,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $role,
                 $hash
             ]);
+
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
             header("Location: login.php?registered=1");
             exit;
@@ -77,37 +94,46 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <p class="subtitle">Join us and help reduce food waste.</p>
 
     <?php if ($error): ?>
-        <div class="message"><?= htmlspecialchars($error) ?></div>
+        <div class="message">
+            <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
+        </div>
     <?php endif; ?>
 
     <form method="POST">
 
+        <input type="hidden" name="csrf_token"
+            value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+
         <div class="form-group">
             <label>Full Name</label>
-            <input type="text" name="name" required maxlength="100">
+            <input type="text" name="name" required maxlength="100"
+                value="<?= htmlspecialchars($_POST['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         </div>
 
         <div class="form-group">
             <label>Email Address</label>
-            <input type="email" name="email" required maxlength="150">
+            <input type="email" name="email" required maxlength="150"
+                value="<?= htmlspecialchars($_POST['email'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         </div>
 
         <div class="form-group">
             <label>Phone Number</label>
-            <input type="tel" name="phone" maxlength="20">
+            <input type="tel" name="phone" maxlength="20"
+                value="<?= htmlspecialchars($_POST['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         </div>
 
         <div class="form-group">
             <label>Organization</label>
-            <input type="text" name="organization" maxlength="150">
+            <input type="text" name="organization" maxlength="150"
+                value="<?= htmlspecialchars($_POST['organization'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
         </div>
 
         <div class="form-group">
             <label>Select Account Type</label>
             <select name="role" required>
                 <option value="">Choose Role</option>
-                <option value="donor">Food Donor</option>
-                <option value="receiver">Food Receiver</option>
+                <option value="donor" <?= ($_POST['role'] ?? '') === 'donor' ? 'selected' : '' ?>>Food Donor</option>
+                <option value="receiver" <?= ($_POST['role'] ?? '') === 'receiver' ? 'selected' : '' ?>>Food Receiver</option>
             </select>
         </div>
 
