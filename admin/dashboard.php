@@ -2,33 +2,101 @@
 require_once "../config/session.php";
 require_once "../config/database.php";
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+// Check admin session
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../auth/login.php");
     exit;
 }
 
+// Verify admin role directly from database
+$adminId = (int) $_SESSION['user_id'];
+
+$stmt = $conn->prepare("
+    SELECT id, name, role
+    FROM users
+    WHERE id = ?
+    LIMIT 1
+");
+$stmt->execute([$adminId]);
+$admin = $stmt->fetch();
+
+// Reject users who are not admins
+if (!$admin || $admin['role'] !== 'admin') {
+    $_SESSION = [];
+
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+
+        setcookie(
+            session_name(),
+            '',
+            time() - 42000,
+            $params['path'],
+            $params['domain'],
+            $params['secure'],
+            $params['httponly']
+        );
+    }
+
+    session_destroy();
+
+    header("Location: ../auth/login.php");
+    exit;
+}
+
+// Update session information from database
+$_SESSION['role'] = $admin['role'];
+$_SESSION['name'] = $admin['name'];
+
+// Dashboard statistics
 $stats = [
     'users' => (int) $conn->query("SELECT COUNT(*) FROM users")->fetchColumn(),
-    'donors' => (int) $conn->query("SELECT COUNT(*) FROM users WHERE role = 'donor'")->fetchColumn(),
-    'receivers' => (int) $conn->query("SELECT COUNT(*) FROM users WHERE role = 'receiver'")->fetchColumn(),
-    'foods' => (int) $conn->query("SELECT COUNT(*) FROM food_listings")->fetchColumn(),
-    'available' => (int) $conn->query("SELECT COUNT(*) FROM food_listings WHERE status = 'available' AND expiry_time > NOW()")->fetchColumn(),
-    'claims' => (int) $conn->query("SELECT COUNT(*) FROM claims")->fetchColumn()
+
+    'donors' => (int) $conn->query("
+        SELECT COUNT(*) FROM users WHERE role = 'donor'
+    ")->fetchColumn(),
+
+    'receivers' => (int) $conn->query("
+        SELECT COUNT(*) FROM users WHERE role = 'receiver'
+    ")->fetchColumn(),
+
+    'foods' => (int) $conn->query("
+        SELECT COUNT(*) FROM food_listings
+    ")->fetchColumn(),
+
+    'available' => (int) $conn->query("
+        SELECT COUNT(*)
+        FROM food_listings
+        WHERE status = 'available'
+        AND expiry_time > NOW()
+    ")->fetchColumn(),
+
+    'claims' => (int) $conn->query("
+        SELECT COUNT(*) FROM claims
+    ")->fetchColumn()
 ];
 
+// Recent food donations
 $recent = $conn->query("
-    SELECT f.food_name, f.quantity, f.status, f.created_at, u.name AS donor_name
+    SELECT
+        f.food_name,
+        f.quantity,
+        f.status,
+        f.created_at,
+        u.name AS donor_name
     FROM food_listings f
     JOIN users u ON u.id = f.donor_id
     ORDER BY f.created_at DESC
     LIMIT 8
 ")->fetchAll();
 
+// HTML output escaping
 function e($value)
 {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -164,11 +232,15 @@ function e($value)
 </head>
 
 <body>
+
     <header>
         <div class="brand">🌱 FoodLoop Admin</div>
 
         <nav class="header-right">
-            <span class="welcome">Welcome, <?= e($_SESSION['name'] ?? 'Admin') ?></span>
+            <span class="welcome">
+                Welcome, <?= e($_SESSION['name']) ?>
+            </span>
+
             <a class="nav-btn" href="dashboard.php">Dashboard</a>
             <a class="nav-btn" href="users.php">Manage Users</a>
             <a class="nav-btn" href="../notifications.php">Notifications</a>
@@ -178,10 +250,12 @@ function e($value)
     </header>
 
     <main>
+
         <h1>Admin Dashboard</h1>
         <p>Overview of FoodLoop platform activity.</p>
 
         <div class="stats">
+
             <div class="card">
                 <p>Total Users</p>
                 <h2><?= $stats['users'] ?></h2>
@@ -211,12 +285,15 @@ function e($value)
                 <p>Total Claims</p>
                 <h2><?= $stats['claims'] ?></h2>
             </div>
+
         </div>
 
         <section class="panel">
+
             <h2>Recent Food Donations</h2>
 
             <div class="wrap">
+
                 <table>
                     <thead>
                         <tr>
@@ -229,30 +306,43 @@ function e($value)
                     </thead>
 
                     <tbody>
+
                         <?php if ($recent): ?>
+
                             <?php foreach ($recent as $food): ?>
+
                                 <tr>
                                     <td><?= e($food['food_name']) ?></td>
                                     <td><?= e($food['donor_name']) ?></td>
                                     <td><?= (int) $food['quantity'] ?></td>
+
                                     <td>
                                         <span class="status">
                                             <?= e(ucfirst($food['status'])) ?>
                                         </span>
                                     </td>
+
                                     <td><?= e($food['created_at']) ?></td>
                                 </tr>
+
                             <?php endforeach; ?>
+
                         <?php else: ?>
+
                             <tr>
                                 <td colspan="5">No donations yet.</td>
                             </tr>
+
                         <?php endif; ?>
+
                     </tbody>
                 </table>
+
             </div>
         </section>
+
     </main>
+
 </body>
 
 </html>

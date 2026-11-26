@@ -43,12 +43,15 @@ if (!$listingId) {
 // Check completed claim and existing feedback
 $stmt = $conn->prepare("
     SELECT f.id, f.food_name, f.category, u.name AS donor_name,
-           fb.id AS feedback_id
+           EXISTS (
+               SELECT 1
+               FROM feedback fb
+               WHERE fb.listing_id = f.id
+                 AND fb.user_id = c.receiver_id
+           ) AS feedback_exists
     FROM claims c
     JOIN food_listings f ON c.listing_id = f.id
     JOIN users u ON f.donor_id = u.id
-    LEFT JOIN feedback fb
-        ON fb.listing_id = f.id AND fb.user_id = c.receiver_id
     WHERE c.receiver_id = ?
       AND c.listing_id = ?
       AND c.status = 'completed'
@@ -58,7 +61,7 @@ $stmt = $conn->prepare("
 $stmt->execute([$receiverId, $listingId]);
 $food = $stmt->fetch();
 
-if (!$food || $food['feedback_id']) {
+if (!$food || $food['feedback_exists']) {
     header("Location: my-claims.php");
     exit;
 }
@@ -79,16 +82,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rating = filter_input(INPUT_POST, 'rating', FILTER_VALIDATE_INT);
         $comment = trim($_POST['comment'] ?? '');
 
-        if (!$rating || $rating < 1 || $rating > 5) {
+        if ($rating === false || $rating === null || $rating < 1 || $rating > 5) {
             $error = "Please select a rating between 1 and 5.";
         } elseif (strlen($comment) > 1000) {
             $error = "Feedback cannot exceed 1000 characters.";
         } else {
 
             try {
-                // Recheck completed claim and insert feedback atomically
                 $conn->beginTransaction();
 
+                // Recheck completed claim
                 $stmt = $conn->prepare("
                     SELECT id
                     FROM claims
@@ -97,63 +100,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       AND status = 'completed'
                     FOR UPDATE
                 ");
+
                 $stmt->execute([$receiverId, $listingId]);
 
                 if (!$stmt->fetch()) {
                     throw new Exception("Completed claim not found.");
                 }
 
-                try {
-                    $conn->beginTransaction();
-
-                    $stmt = $conn->prepare("
-        SELECT id
-        FROM claims
-        WHERE receiver_id = ?
-          AND listing_id = ?
-          AND status = 'completed'
-        FOR UPDATE
-    ");
-                    $stmt->execute([$receiverId, $listingId]);
-
-                    if (!$stmt->fetch()) {
-                        throw new Exception("Completed claim not found.");
-                    }
-
-                    $stmt = $conn->prepare("
-        INSERT INTO feedback
-        (user_id, listing_id, rating, comment)
-        VALUES (?, ?, ?, ?)
-    ");
-
-                    $stmt->execute([
-                        $receiverId,
-                        $listingId,
-                        $rating,
-                        $comment !== '' ? $comment : null
-                    ]);
-
-                    $conn->commit();
-
-                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-
-                    header("Location: my-claims.php?feedback=success");
-                    exit;
-
-                } catch (Throwable $e) {
-                    if ($conn->inTransaction()) {
-                        $conn->rollBack();
-                    }
-
-                    error_log("FoodLoop feedback error: " . $e->getMessage());
-                    $error = "Feedback could not be submitted. It may already exist.";
-                }
+                // Insert feedback once
+                $stmt = $conn->prepare("
+                    INSERT INTO feedback
+                    (user_id, listing_id, rating, comment)
+                    VALUES (?, ?, ?, ?)
+                ");
 
                 $stmt->execute([
                     $receiverId,
                     $listingId,
                     $rating,
-                    $comment
+                    $comment !== '' ? $comment : null
                 ]);
 
                 $conn->commit();
@@ -163,13 +128,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header("Location: my-claims.php?feedback=success");
                 exit;
 
-            } catch (Throwable $e) {
+            } catch (Throwable $ex) {
 
                 if ($conn->inTransaction()) {
                     $conn->rollBack();
                 }
 
-                error_log("FoodLoop feedback error: " . $e->getMessage());
+                error_log("FoodLoop feedback error: " . $ex->getMessage());
+
                 $error = "Feedback could not be submitted. It may already exist.";
             }
         }

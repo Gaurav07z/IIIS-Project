@@ -2,38 +2,97 @@
 require_once "../config/session.php";
 require_once "../config/database.php";
 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+// Check whether a user is logged in
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../auth/login.php");
     exit;
 }
 
-$stmt = $conn->query("
-    SELECT
-        fb.id,
-        fb.rating,
-        fb.comment,
-        fb.created_at,
-        u.name AS receiver_name,
-        u.email AS receiver_email,
-        f.food_name,
-        f.category,
-        donor.name AS donor_name
-    FROM feedback fb
-    JOIN users u ON fb.user_id = u.id
-    JOIN food_listings f ON fb.listing_id = f.id
-    JOIN users donor ON f.donor_id = donor.id
-    ORDER BY fb.created_at DESC
-");
+// Verify admin role directly from the database
+try {
+    $adminStmt = $conn->prepare("
+        SELECT id, name, role
+        FROM users
+        WHERE id = ?
+        LIMIT 1
+    ");
 
-$feedbacks = $stmt->fetchAll();
+    $adminStmt->execute([$_SESSION['user_id']]);
+    $admin = $adminStmt->fetch();
+
+    if (!$admin || $admin['role'] !== 'admin') {
+        // Clear session cookie
+        $_SESSION = [];
+
+        if (ini_get("session.use_cookies")) {
+            $params = session_get_cookie_params();
+
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params['path'],
+                $params['domain'],
+                $params['secure'],
+                $params['httponly']
+            );
+        }
+
+        session_destroy();
+
+        header("Location: ../auth/login.php");
+        exit;
+    }
+
+    // Refresh session information from database
+    $_SESSION['role'] = $admin['role'];
+    $_SESSION['name'] = $admin['name'];
+
+} catch (PDOException $e) {
+    error_log("Admin feedback authorization error: " . $e->getMessage());
+    http_response_code(500);
+    exit("Something went wrong. Please try again later.");
+}
+
+// Fetch all feedback
+try {
+    $stmt = $conn->query("
+        SELECT
+            fb.id,
+            fb.rating,
+            fb.comment,
+            fb.created_at,
+            u.name AS receiver_name,
+            u.email AS receiver_email,
+            f.food_name,
+            f.category,
+            donor.name AS donor_name
+        FROM feedback fb
+        JOIN users u ON fb.user_id = u.id
+        JOIN food_listings f ON fb.listing_id = f.id
+        JOIN users donor ON f.donor_id = donor.id
+        ORDER BY fb.created_at DESC
+    ");
+
+    $feedbacks = $stmt->fetchAll();
+
+} catch (PDOException $e) {
+    error_log("Feedback fetching error: " . $e->getMessage());
+    http_response_code(500);
+    exit("Unable to load feedback. Please try again later.");
+}
+
 $totalFeedback = count($feedbacks);
 
 $averageRating = 0;
 
 if ($totalFeedback > 0) {
-    $averageRating = array_sum(array_column($feedbacks, 'rating')) / $totalFeedback;
+    $averageRating = array_sum(
+        array_column($feedbacks, 'rating')
+    ) / $totalFeedback;
 }
 
+// Secure HTML output
 function e($value)
 {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -215,6 +274,7 @@ function e($value)
         <h1>Feedback Management</h1>
 
         <section class="stats">
+
             <div class="stat-card">
                 <p>Total Feedback</p>
                 <h2><?= $totalFeedback ?></h2>
@@ -228,6 +288,7 @@ function e($value)
                         : "0 / 5" ?>
                 </h2>
             </div>
+
         </section>
 
         <h2 style="margin-bottom:20px;">All Receiver Feedback</h2>
@@ -248,6 +309,7 @@ function e($value)
                     <h3><?= e($feedback['food_name']) ?></h3>
 
                     <div class="details">
+
                         <strong>Receiver:</strong>
                         <?= e($feedback['receiver_name']) ?><br>
 
@@ -262,23 +324,28 @@ function e($value)
 
                         <strong>Date:</strong>
                         <?= e($feedback['created_at']) ?>
+
                     </div>
 
                     <div class="rating">
+
                         <?= str_repeat("★", (int) $feedback['rating']) ?>
                         <?= str_repeat("☆", 5 - (int) $feedback['rating']) ?>
 
                         <span style="color:#64736a;font-size:15px;">
                             (<?= (int) $feedback['rating'] ?>/5)
                         </span>
+
                     </div>
 
                     <div class="comment">
+
                         <strong>Receiver Comment:</strong><br>
 
                         <?= $feedback['comment'] !== null && $feedback['comment'] !== ''
                             ? nl2br(e($feedback['comment']))
                             : 'No comment provided.' ?>
+
                     </div>
 
                 </article>
