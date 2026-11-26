@@ -1,8 +1,6 @@
-
 <?php
-require_once "../config/database.php";
 require_once "../config/session.php";
-
+require_once "../config/database.php";
 $error = "";
 
 // Check existing login session and current verification status
